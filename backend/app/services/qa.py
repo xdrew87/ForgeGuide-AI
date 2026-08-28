@@ -136,7 +136,9 @@ def _call_ollama(messages: list[dict]) -> str:
                 "temperature": 0.1,   # low temp for factual retrieval tasks
             },
         },
-        timeout=300,  # local models can be slow
+        # CPU-only inference (e.g. Intel Mac, no GPU passthrough in Docker) can
+        # take several minutes for a full prompt + generation pass.
+        timeout=900,
     )
     response.raise_for_status()
     data = response.json()
@@ -144,16 +146,31 @@ def _call_ollama(messages: list[dict]) -> str:
 
 
 def _parse_citations(raw_text: str, chunks: list[dict]) -> tuple[str, list[Citation]]:
-    """Extract ```citations JSON block from raw LLM output."""
+    """
+    Extract the citations JSON array from raw LLM output.
+    Prefers the requested ```citations fenced block, but falls back to a
+    trailing bare JSON array (optionally preceded by a "Citations:" label) —
+    smaller/local models often don't follow the exact fence format.
+    """
     import re
     citations = []
     clean_text = raw_text
+    json_str = None
 
     match = re.search(r"```citations\s*([\s\S]*?)```", raw_text)
     if match:
         clean_text = raw_text[:match.start()].strip()
+        json_str = match.group(1).strip()
+    else:
+        fallback = re.search(r"(\[\s*\{[\s\S]*?\}\s*\])\s*$", raw_text.strip())
+        if fallback:
+            clean_text = raw_text[:fallback.start()].rstrip()
+            clean_text = re.sub(r"(?i)\n?citations:\s*$", "", clean_text).strip()
+            json_str = fallback.group(1)
+
+    if json_str:
         try:
-            cite_data = json.loads(match.group(1).strip())
+            cite_data = json.loads(json_str)
             for c in cite_data:
                 matching = next(
                     (ch for ch in chunks
@@ -176,16 +193,25 @@ def _parse_citations(raw_text: str, chunks: list[dict]) -> tuple[str, list[Citat
 
 
 def _estimate_confidence(chunks: list[dict]) -> float:
+    """
+    Confidence is based on actual retrieval relevance (semantic cosine
+    similarity), not the RRF fused rank score — RRF scores are for ordering
+    results, not for measuring how relevant they are, and top out far below
+    any usable range (e.g. ~0.03 for a rank-0 hit with RRF_K=60).
+    Keyword-only matches (no semantic score) get a moderate fixed score
+    since an exact keyword hit is still real evidence.
+    """
     if not chunks:
         return 0.0
-    scores = [c.get("fused_score", 0) or c.get("score", 0) or 0 for c in chunks]
+    KEYWORD_ONLY_SCORE = 0.5
+    scores = [c.get("score") or KEYWORD_ONLY_SCORE for c in chunks]
     avg_score = sum(scores) / len(scores)
     coverage_factor = min(len(chunks) / 3, 1.0)
-    return round(min(avg_score * 10 * coverage_factor, 1.0), 2)
+    return round(min(avg_score * coverage_factor, 1.0), 2)
 
 
 def answer(db: Session, question: str, equipment_id: str | None = None) -> QAResult:
-    chunks = retrieve(db, question, equipment_id=equipment_id, top_k=6)
+    chunks = retrieve(db, question, equipment_id=equipment_id, top_k=10)
     confidence = _estimate_confidence(chunks)
 
     if not chunks or confidence < settings.evidence_confidence_threshold:

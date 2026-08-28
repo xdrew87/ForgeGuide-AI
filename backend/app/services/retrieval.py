@@ -18,15 +18,30 @@ TOP_K_SEMANTIC = 10
 TOP_K_KEYWORD = 6
 RRF_K = 60  # RRF rank fusion constant
 
+# Common words excluded from keyword search so matching reflects domain terms
+# (fault codes, part numbers, section names) rather than incidental overlap.
+STOPWORDS = {
+    "the", "and", "for", "are", "but", "not", "you", "with", "this", "that",
+    "from", "has", "have", "been", "what", "should", "after", "under",
+    "does", "did", "how", "why", "when", "where", "which", "who", "can",
+    "will", "would", "could", "shows", "showing", "shown",
+}
+
 
 def _keyword_search(db: Session, query: str, equipment_id: str | None, top_k: int) -> list[dict]:
-    """Simple keyword search using SQL ILIKE against chunk text."""
-    keywords = [w for w in re.findall(r"\b\w{3,}\b", query.lower()) if len(w) > 2]
+    """Keyword search using SQL ILIKE, ranked by number of matched keywords."""
+    keywords = [
+        w for w in re.findall(r"\b\w{3,}\b", query.lower())
+        if w not in STOPWORDS
+    ]
     if not keywords:
         return []
 
-    # Build OR conditions for each keyword
+    # Build OR conditions and a match-count expression for ranking
     conditions = " OR ".join([f"LOWER(dc.text) LIKE :kw{i}" for i in range(len(keywords))])
+    match_count_expr = " + ".join(
+        [f"(CASE WHEN LOWER(dc.text) LIKE :kw{i} THEN 1 ELSE 0 END)" for i in range(len(keywords))]
+    )
     params = {f"kw{i}": f"%{kw}%" for i, kw in enumerate(keywords)}
 
     eq_filter = ""
@@ -36,11 +51,12 @@ def _keyword_search(db: Session, query: str, equipment_id: str | None, top_k: in
 
     sql = text(f"""
         SELECT dc.id, dc.document_id, dc.page, dc.section, dc.text, dc.char_count,
-               d.title as document_title, d.equipment_id
+               d.title as document_title, d.equipment_id,
+               ({match_count_expr}) as match_count
         FROM document_chunks dc
         JOIN documents d ON d.id = dc.document_id
         WHERE ({conditions}) {eq_filter}
-        ORDER BY LENGTH(dc.text) DESC
+        ORDER BY match_count DESC, LENGTH(dc.text) DESC
         LIMIT :top_k
     """)
     params["top_k"] = top_k
@@ -55,7 +71,7 @@ def _keyword_search(db: Session, query: str, equipment_id: str | None, top_k: in
             "page": row.page,
             "section": row.section,
             "text": row.text,
-            "score": None,  # no score for keyword
+            "score": round(row.match_count / len(keywords), 4) if row.match_count else None,
         }
         for row in rows
     ]
@@ -77,7 +93,8 @@ def _rrf_fuse(semantic: list[dict], keyword: list[dict]) -> list[dict]:
     for rank, item in enumerate(keyword):
         cid = item["chunk_id"]
         scores[cid] = scores.get(cid, 0) + 1 / (RRF_K + rank + 1)
-        sources[cid] = {**item, "score": item.get("score") or 0}
+        if cid not in sources:
+            sources[cid] = {**item, "score": item.get("score") or 0}
 
     merged = []
     for cid, fused_score in sorted(scores.items(), key=lambda x: -x[1]):

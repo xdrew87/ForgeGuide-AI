@@ -37,9 +37,11 @@ class EmbeddingService:
     # ── Anthropic / Voyage ────────────────────────────────────────────────────
 
     def _embed_voyage(self, texts: list[str]) -> list[list[float]]:
-        """Voyage AI embeddings (recommended with Anthropic API key)."""
+        """Voyage AI embeddings (Anthropic's recommended embedding partner).
+        Voyage issues its own API keys, separate from the Anthropic API key —
+        get one at https://dash.voyageai.com."""
         headers = {
-            "Authorization": f"Bearer {settings.anthropic_api_key}",
+            "Authorization": f"Bearer {settings.voyage_api_key}",
             "Content-Type": "application/json",
         }
         response = httpx.post(

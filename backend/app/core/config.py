@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     # Anthropic
     anthropic_api_key: str = ""
 
+    # Voyage AI (used for embeddings when embedding_provider="anthropic" —
+    # Voyage is Anthropic's recommended embedding partner but issues its own,
+    # separate API keys from https://dash.voyageai.com)
+    voyage_api_key: str = ""
+
     # OpenAI
     openai_api_key: str = ""
 
