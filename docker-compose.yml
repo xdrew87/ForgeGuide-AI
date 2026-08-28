@@ -1,0 +1,96 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: forgeguide
+      POSTGRES_PASSWORD: forgeguide
+      POSTGRES_DB: forgeguide
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forgeguide"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:v1.9.0
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrantdata:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6333/readyz || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  # ── Ollama (local LLM) ────────────────────────────────────────────────────
+  # Only used when LLM_PROVIDER=ollama in .env.
+  #
+  # ⚠ INTEL MAC WARNING:
+  # Ollama inside Docker on an Intel MacBook Pro runs on CPU with no GPU
+  # acceleration. Models will be very slow (60–300s per response) and are
+  # NOT recommended for demo use on Intel hardware.
+  # Use LLM_PROVIDER=anthropic or LLM_PROVIDER=openai instead.
+  #
+  # Ollama runs well natively on:
+  #   - Apple Silicon Macs (M1/M2/M3/M4) — Metal GPU
+  #   - Linux with NVIDIA GPU
+  #   - Windows with NVIDIA GPU (WSL2)
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollamadata:/root/.ollama
+    # Linux + NVIDIA GPU only — uncomment to enable:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://forgeguide:forgeguide@db:5432/forgeguide
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: "6333"
+      UPLOAD_DIR: /app/uploads
+      OLLAMA_BASE_URL: http://ollama:11434
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    env_file: .env
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      BACKEND_URL: http://backend:8000
+
+volumes:
+  pgdata:
+  qdrantdata:
+  uploads:
+  ollamadata:
