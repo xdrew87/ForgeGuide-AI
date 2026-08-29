@@ -2,14 +2,35 @@
 
 **Evidence-grounded multimodal industrial maintenance assistant**
 
+[![CI](https://github.com/xdrew87/ForgeGuide-AI/actions/workflows/ci.yml/badge.svg)](https://github.com/xdrew87/ForgeGuide-AI/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](backend)
+[![Next.js 15](https://img.shields.io/badge/Next.js-15-black.svg)](frontend)
+[![Docker Compose](https://img.shields.io/badge/Deploy-Docker%20Compose-2496ED.svg)](docker-compose.yml)
 
-Built for ABB Accelerator 2026 — Theme 2: Multimodal Maintenance Intelligence Agent.
+Built for **ABB Accelerator 2026 — Theme 2: Multimodal Maintenance Intelligence Agent.**
 
-> **Core principle: no evidence, no answer.** ForgeGuide AI is a retrieval-augmented
-> assistant with a hard evidence gate in front of the LLM. If the retrieved
-> documentation doesn't clear a confidence threshold, the system declines to
-> answer instead of guessing — it never fabricates a maintenance procedure.
+> ### Core principle: no evidence, no answer.
+> ForgeGuide AI is a retrieval-augmented assistant with a hard evidence gate
+> in front of the LLM. If the retrieved documentation doesn't clear a
+> confidence threshold, the system declines to answer instead of guessing —
+> it never fabricates a maintenance procedure.
+
+---
+
+## Contents
+
+- [How it works](#how-it-works)
+- [Stack](#stack)
+- [Quick start](#quick-start)
+- [Common commands](#common-commands)
+- [Architecture](#architecture)
+- [Running tests](#running-tests)
+- [Project structure](#project-structure)
+- [Safety constraints](#safety-constraints)
+- [Demo content](#demo-content)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
@@ -20,14 +41,14 @@ Built for ABB Accelerator 2026 — Theme 2: Multimodal Maintenance Intelligence 
 3. A technician asks a maintenance question in plain language
 4. Hybrid retrieval (semantic + keyword search, fused with RRF) pulls the
    relevant passages
-5. If retrieval confidence clears the threshold, the LLM answers **strictly
-   from the retrieved context** and cites page/section for every claim
-6. If it doesn't, the system returns an explicit `INSUFFICIENT_EVIDENCE`
+5. **If retrieval confidence clears the threshold** → the LLM answers
+   strictly from the retrieved context and cites page/section for every claim
+6. **If it doesn't** → the system returns an explicit `INSUFFICIENT_EVIDENCE`
    response — no answer is better than a wrong one
 7. Optionally, upload a photo of an equipment fault display — fault codes are
    extracted (vision model or OCR) and matched against the indexed manuals
 
-**Example query** (against the included synthetic demo manual):
+**Try it** (against the included synthetic demo manual):
 
 > "The MX-400 shows E17 after 20 minutes under load. What should I check?"
 
@@ -42,7 +63,7 @@ return the insufficient-evidence refusal.
 
 | Layer | Tech |
 |---|---|
-| Frontend | Next.js 14, React 18, Tailwind CSS, TypeScript |
+| Frontend | Next.js 15, React 18, Tailwind CSS, TypeScript |
 | Backend | Python 3.12, FastAPI, SQLAlchemy |
 | Database | PostgreSQL 16 |
 | Vector DB | Qdrant |
@@ -59,8 +80,8 @@ return the insufficient-evidence refusal.
 - Docker Desktop
 - One of: an Anthropic API key, an OpenAI API key, or [Ollama](https://ollama.com) running locally via Docker
 
-> **Apple Silicon / Linux+NVIDIA / Windows+NVIDIA:** Ollama runs well locally — no API key needed.
-> **Intel Mac:** Ollama has no GPU access in Docker, so local inference can take 60–300 seconds per response. It still works, but Anthropic or OpenAI will feel much more responsive for a live demo.
+> **Apple Silicon / Linux+NVIDIA / Windows+NVIDIA** — Ollama runs well locally, no API key needed.
+> **Intel Mac** — Ollama has no GPU access in Docker, so local inference can take 60–300 seconds per response. It still works, but Anthropic or OpenAI feel much more responsive for a live demo.
 
 ### 1. Clone and configure
 
@@ -125,7 +146,7 @@ make clean           # stop and wipe all volumes (full reset)
 make urls            # print service URLs
 ```
 
-Ollama-specific:
+**Ollama-specific:**
 
 ```bash
 make ollama-list                       # see downloaded models
@@ -138,18 +159,21 @@ make ollama-run                        # interactive shell against the configure
 
 ## Architecture
 
-```
-frontend (Next.js)
-    │  REST JSON, proxied through /api/v1
-    ▼
-backend (FastAPI)
-    ├── Document ingestion   PyMuPDF text extraction + Tesseract OCR fallback → chunking → embedding
-    ├── Hybrid retrieval     Qdrant semantic search + SQL keyword search, fused with RRF
-    ├── Grounded QA          evidence-gated LLM call, citations parsed from output
-    └── Vision               fault-code extraction from equipment photos
-    │
-    ├── PostgreSQL   documents, chunks, equipment, conversations, messages
-    └── Qdrant       chunk embeddings
+```mermaid
+flowchart TD
+    FE["Frontend (Next.js)"] -->|"REST JSON, proxied through /api/v1"| BE["Backend (FastAPI)"]
+
+    subgraph BE_INNER [" "]
+        direction TB
+        ING["Document ingestion<br/>PyMuPDF text extraction + Tesseract OCR fallback → chunking → embedding"]
+        RET["Hybrid retrieval<br/>Qdrant semantic search + SQL keyword search, fused with RRF"]
+        QA["Grounded QA<br/>evidence-gated LLM call, citations parsed from output"]
+        VIS["Vision<br/>fault-code extraction from equipment photos"]
+    end
+
+    BE --> BE_INNER
+    BE_INNER --> PG[("PostgreSQL<br/>documents, chunks, equipment, conversations, messages")]
+    BE_INNER --> QD[("Qdrant<br/>chunk embeddings")]
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design,
@@ -184,6 +208,9 @@ extraction, and RRF fusion.
 
 ## Project structure
 
+<details>
+<summary>Click to expand</summary>
+
 ```
 ForgeGuide-AI/
 ├── backend/
@@ -205,6 +232,8 @@ ForgeGuide-AI/
 ├── docker-compose.yml
 └── setup.sh
 ```
+
+</details>
 
 ---
 
@@ -229,6 +258,15 @@ not describe any real ABB or third-party product. Regenerate it with:
 ```bash
 python3 scripts/generate_demo_manual.py
 ```
+
+---
+
+## Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup,
+the PR checklist, and the one rule that can't be bent: nothing gets merged
+that weakens the evidence gate. Found a security issue? See
+[SECURITY.md](SECURITY.md) instead of opening a public issue.
 
 ---
 
