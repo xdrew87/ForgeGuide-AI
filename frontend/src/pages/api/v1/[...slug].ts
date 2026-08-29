@@ -5,14 +5,24 @@ import type { NextApiRequest, NextApiResponse } from "next";
 // and the frontend container will use it correctly.
 
 const BACKEND = process.env.BACKEND_URL || "http://localhost:8000";
+const BACKEND_ORIGIN = new URL(BACKEND);
+
+// Only allow simple path segments — no "..", no slashes, no scheme/host
+// injection — so the request can never be redirected off BACKEND_ORIGIN.
+const SAFE_SEGMENT = /^[A-Za-z0-9_.-]+$/;
 
 export const config = { api: { bodyParser: false } };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const slug = (req.query.slug as string[]) || [];
-  const path = slug.join("/");
-  const qs = req.url?.split("?")[1] ? `?${req.url.split("?")[1]}` : "";
-  const url = `${BACKEND}/api/v1/${path}${qs}`;
+  if (slug.some((seg) => seg === ".." || seg === "." || !SAFE_SEGMENT.test(seg))) {
+    res.status(400).json({ error: "Invalid path" });
+    return;
+  }
+
+  const url = new URL(`/api/v1/${slug.map(encodeURIComponent).join("/")}`, BACKEND_ORIGIN);
+  const qs = req.url?.split("?")[1];
+  if (qs) url.search = qs;
 
   const headers: Record<string, string> = {};
   for (const [k, v] of Object.entries(req.headers)) {
