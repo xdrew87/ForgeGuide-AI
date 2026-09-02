@@ -32,6 +32,8 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    // Fetch-on-mount, not a state-sync effect; setState happens inside the async callbacks after an await.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     checkHealth();
     loadEquipment();
     loadDocuments();
