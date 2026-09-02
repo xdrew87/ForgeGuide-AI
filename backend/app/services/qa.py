@@ -162,11 +162,19 @@ def _parse_citations(raw_text: str, chunks: list[dict]) -> tuple[str, list[Citat
         clean_text = raw_text[:match.start()].strip()
         json_str = match.group(1).strip()
     else:
-        fallback = re.search(r"(\[\s*\{[\s\S]*?\}\s*\])\s*$", raw_text.strip())
-        if fallback:
-            clean_text = raw_text[:fallback.start()].rstrip()
+        # Some models wrap the array in a ```json (or unlabeled) fence instead
+        # of the requested ```citations fence.
+        fenced = re.search(r"```(?:\w+)?\s*(\[\s*\{[\s\S]*?\}\s*\])\s*```", raw_text)
+        if fenced:
+            clean_text = raw_text[:fenced.start()].rstrip()
             clean_text = re.sub(r"(?i)\n?citations:\s*$", "", clean_text).strip()
-            json_str = fallback.group(1)
+            json_str = fenced.group(1)
+        else:
+            fallback = re.search(r"(\[\s*\{[\s\S]*?\}\s*\])\s*$", raw_text.strip())
+            if fallback:
+                clean_text = raw_text[:fallback.start()].rstrip()
+                clean_text = re.sub(r"(?i)\n?citations:\s*$", "", clean_text).strip()
+                json_str = fallback.group(1)
 
     if json_str:
         try:

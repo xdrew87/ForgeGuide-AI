@@ -229,6 +229,24 @@ class TestCitationParsing:
         assert citations[0].document == "MX-400 Manual"
         assert "```citations" not in clean
 
+    def test_parses_json_fenced_citations_block(self):
+        # Smaller/local models often use ```json instead of the requested
+        # ```citations fence — regression test for that fallback path.
+        from app.services.qa import _parse_citations
+        raw = """The heat sink should be inspected.
+
+Citations:
+```json
+[{"document": "MX-400 Manual", "page": 8, "section": "4.1", "excerpt": "Inspect fan blades"}]
+```"""
+        chunks = [{"document_title": "MX-400 Manual", "page": 8, "chunk_id": "c1", "document_id": "d1"}]
+        clean, citations = _parse_citations(raw, chunks)
+        assert len(citations) == 1
+        assert citations[0].page == 8
+        assert citations[0].document == "MX-400 Manual"
+        assert "```" not in clean
+        assert "Citations:" not in clean
+
     def test_handles_missing_citations_block(self):
         from app.services.qa import _parse_citations
         raw = "Answer without any citation block."

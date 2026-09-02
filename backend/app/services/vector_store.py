@@ -90,9 +90,9 @@ class VectorStore:
                 must=[FieldCondition(key="equipment_id", match=MatchValue(value=equipment_id))]
             )
 
-        results = self.client.search(
+        response = self.client.query_points(
             collection_name=self.collection,
-            query_vector=query_vector,
+            query=query_vector,
             limit=top_k,
             query_filter=filt,
             score_threshold=score_threshold,
@@ -110,7 +110,7 @@ class VectorStore:
                 "section": r.payload.get("section"),
                 "text": r.payload.get("text"),
             }
-            for r in results
+            for r in response.points
         ]
 
     def delete_by_document(self, document_id: str):
