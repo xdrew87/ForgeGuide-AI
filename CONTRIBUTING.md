@@ -15,7 +15,7 @@ cd ForgeGuide-AI
 bash setup.sh
 ```
 
-Windows (PowerShell 7+):
+Windows (PowerShell):
 
 ```powershell
 git clone https://github.com/xdrew87/ForgeGuide-AI.git

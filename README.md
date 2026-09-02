@@ -80,7 +80,6 @@ return the insufficient-evidence refusal.
 - Docker Desktop
 - Python 3.11+
 - One of: an Anthropic API key, an OpenAI API key, or [Ollama](https://ollama.com) running locally via Docker
-- Windows only: [PowerShell 7+](https://learn.microsoft.com/powershell/scripting/install/installing-powershell) (`pwsh`) — `setup.ps1` and `make.ps1` don't run on the older Windows PowerShell 5.1
 
 > **Apple Silicon / Linux+NVIDIA / Windows+NVIDIA** — Ollama runs well locally, no API key needed.
 > **Intel Mac** — Ollama has no GPU access in Docker, so local inference can take 60–300 seconds per response. It still works, but Anthropic or OpenAI feel much more responsive for a live demo.
@@ -95,7 +94,7 @@ cd ForgeGuide-AI
 bash setup.sh
 ```
 
-**Windows (PowerShell 7+):**
+**Windows (PowerShell):**
 
 ```powershell
 git clone https://github.com/xdrew87/ForgeGuide-AI.git
@@ -168,7 +167,7 @@ make clean           # stop and wipe all volumes (full reset)
 make urls            # print service URLs
 ```
 
-Windows (PowerShell 7+, no GNU Make required) — same targets via `make.ps1`:
+Windows (PowerShell, no GNU Make required) — same targets via `make.ps1`:
 
 ```powershell
 .\make.ps1 up

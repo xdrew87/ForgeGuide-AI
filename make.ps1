@@ -1,5 +1,7 @@
-#Requires -Version 7.0
-# ForgeGuide AI — Windows task runner (PowerShell equivalent of the Makefile)
+# ForgeGuide AI - Windows task runner (PowerShell equivalent of the Makefile)
+# Works on both Windows PowerShell 5.1 (built into Windows) and PowerShell 7+.
+# Pure ASCII on purpose: Windows PowerShell 5.1 does not reliably auto-detect
+# UTF-8 without a BOM, and misreading non-ASCII bytes breaks parsing.
 #
 # Usage: .\make.ps1 <target> [-Model <name>]
 # Example: .\make.ps1 ollama-pull-llm -Model mistral
@@ -15,8 +17,10 @@ $ErrorActionPreference = "Stop"
 function Get-PythonCmd {
     foreach ($candidate in @("py", "python", "python3")) {
         if (Get-Command $candidate -ErrorAction SilentlyContinue) {
-            if ($candidate -eq "py") { return @("py", "-3") }
-            return @($candidate)
+            if ($candidate -eq "py") {
+                return [PSCustomObject]@{ Exe = "py"; Args = @("-3") }
+            }
+            return [PSCustomObject]@{ Exe = $candidate; Args = @() }
         }
     }
     throw "Python 3 not found. Install: https://python.org"
@@ -59,7 +63,8 @@ switch ($Target) {
 
     "demo" {
         $py = Get-PythonCmd
-        & $py[0] @($py[1..($py.Length - 1)]) scripts/generate_demo_manual.py
+        $pyArgs = $py.Args
+        & $py.Exe @pyArgs scripts/generate_demo_manual.py
     }
 
     "seed" {
@@ -68,11 +73,11 @@ switch ($Target) {
         $eq = Invoke-RestMethod -Method Post -Uri "http://localhost:8000/api/v1/equipment/" `
             -ContentType "application/json" -Body $body
         $eqId = $eq.id
-        Invoke-RestMethod -Method Post -Uri "http://localhost:8000/api/v1/documents/upload" -Form @{
-            file         = Get-Item "demo-data/MX400-Maintenance-Manual-DEMO.pdf"
-            title        = "MX-400 Maintenance Manual (DEMO)"
-            equipment_id = "$eqId"
-        } | Out-Null
+        & curl.exe -sf -X POST "http://localhost:8000/api/v1/documents/upload" `
+            -F "file=@demo-data/MX400-Maintenance-Manual-DEMO.pdf" `
+            -F "title=MX-400 Maintenance Manual (DEMO)" `
+            -F "equipment_id=$eqId" | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Document upload failed (curl exit $LASTEXITCODE)" }
         Write-Host "Done. Equipment id: $eqId"
     }
 
@@ -113,7 +118,7 @@ switch ($Target) {
     }
 
     default {
-        Write-Host "ForgeGuide AI — available targets:"
+        Write-Host "ForgeGuide AI - available targets:"
         Write-Host ""
         Write-Host "  setup                start-to-finish setup (env, demo PDF, docker, seed)"
         Write-Host "  up                    start all services"

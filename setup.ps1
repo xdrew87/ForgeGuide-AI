@@ -1,11 +1,13 @@
-#Requires -Version 7.0
-# ForgeGuide AI — Windows setup (PowerShell equivalent of setup.sh)
+# ForgeGuide AI - Windows setup (PowerShell equivalent of setup.sh)
+# Works on both Windows PowerShell 5.1 (built into Windows) and PowerShell 7+.
+# Pure ASCII on purpose: Windows PowerShell 5.1 does not reliably auto-detect
+# UTF-8 without a BOM, and misreading non-ASCII bytes breaks parsing.
 $ErrorActionPreference = "Stop"
 
-function Write-Info    { param($msg) Write-Host "▶ $msg" -ForegroundColor Green }
-function Write-Warn    { param($msg) Write-Host "⚠  $msg" -ForegroundColor Yellow }
-function Write-ErrorAndExit { param($msg) Write-Host "✗ $msg" -ForegroundColor Red; exit 1 }
-function Write-Section { param($msg) Write-Host "`n$msg" -ForegroundColor Cyan; Write-Host ("─" * 39) }
+function Write-Info    { param($msg) Write-Host ">> $msg" -ForegroundColor Green }
+function Write-Warn    { param($msg) Write-Host "WARNING: $msg" -ForegroundColor Yellow }
+function Write-ErrorAndExit { param($msg) Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
+function Write-Section { param($msg) Write-Host "`n$msg" -ForegroundColor Cyan; Write-Host ("-" * 39) }
 
 function Get-EnvValue {
     param([string]$Name)
@@ -15,9 +17,9 @@ function Get-EnvValue {
     return ($line -replace "^\s*$Name\s*=", "").Trim()
 }
 
-Write-Section "ForgeGuide AI — Setup"
+Write-Section "ForgeGuide AI - Setup"
 
-# ── 1. Prerequisites ─────────────────────────────────────────────────────────
+# -- 1. Prerequisites --------------------------------------------------------
 Write-Info "Checking prerequisites..."
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
@@ -31,7 +33,11 @@ foreach ($candidate in @("py", "python", "python3")) {
 if (-not $PythonCmd) {
     Write-ErrorAndExit "Python 3 not found. Install: https://python.org"
 }
-$PythonArgs = if ($PythonCmd -eq "py") { @("-3") } else { @() }
+if ($PythonCmd -eq "py") {
+    $PythonArgs = @("-3")
+} else {
+    $PythonArgs = @()
+}
 
 $pyVerCheck = & $PythonCmd @PythonArgs -c "import sys; print(sys.version_info[:2] >= (3,11))"
 if ($pyVerCheck.Trim() -ne "True") {
@@ -54,7 +60,7 @@ Write-Host "  Python: $pyVerString"
 Write-Host "  Docker: $dockerVerString"
 Write-Host "  OS:     Windows"
 
-# ── 2. Environment file ──────────────────────────────────────────────────────
+# -- 2. Environment file ------------------------------------------------------
 Write-Section "Environment"
 
 if (-not (Test-Path .env)) {
@@ -63,14 +69,14 @@ if (-not (Test-Path .env)) {
     Write-Host ""
     Write-Host "  Open .env and set your API key, then press Enter."
     Write-Host ""
-    Write-Host "  Option A — Anthropic (recommended):"
+    Write-Host "  Option A - Anthropic (recommended):"
     Write-Host "    ANTHROPIC_API_KEY=sk-ant-..."
     Write-Host ""
-    Write-Host "  Option B — OpenAI:"
+    Write-Host "  Option B - OpenAI:"
     Write-Host "    LLM_PROVIDER=openai"
     Write-Host "    OPENAI_API_KEY=sk-..."
     Write-Host ""
-    Write-Host "  Option C — Ollama (needs an NVIDIA GPU + WSL2 backend in Docker Desktop):"
+    Write-Host "  Option C - Ollama (needs an NVIDIA GPU + WSL2 backend in Docker Desktop):"
     Write-Host "    LLM_PROVIDER=ollama"
     Write-Host ""
     Read-Host "  Press Enter after editing .env to continue"
@@ -91,7 +97,7 @@ if ($LlmProvider -eq "ollama") {
     }
 }
 
-# ── 3. Demo manual ───────────────────────────────────────────────────────────
+# -- 3. Demo manual ------------------------------------------------------------
 Write-Section "Demo data"
 
 if (-not (Test-Path "demo-data/MX400-Maintenance-Manual-DEMO.pdf")) {
@@ -102,13 +108,13 @@ if (-not (Test-Path "demo-data/MX400-Maintenance-Manual-DEMO.pdf")) {
     Write-Info "Demo PDF already exists"
 }
 
-# ── 4. Docker services ───────────────────────────────────────────────────────
+# -- 4. Docker services --------------------------------------------------------
 Write-Section "Docker services"
 Write-Info "Building and starting services (first run: 3-5 min)..."
 docker compose up -d --build
 if ($LASTEXITCODE -ne 0) { Write-ErrorAndExit "docker compose up failed." }
 
-# ── 5. Pull Ollama models (only if provider=ollama and user confirmed above) ─
+# -- 5. Pull Ollama models (only if provider=ollama and user confirmed above) -
 if ($LlmProvider -eq "ollama") {
     Write-Section "Ollama models"
 
@@ -148,7 +154,7 @@ if ($LlmProvider -eq "ollama") {
     }
 }
 
-# ── 6. Wait for backend ──────────────────────────────────────────────────────
+# -- 6. Wait for backend --------------------------------------------------------
 Write-Section "Health check"
 Write-Info "Waiting for backend..."
 $max = 90
@@ -166,7 +172,7 @@ for ($i = 0; $i -lt $max; $i++) {
 if (-not $backendReady) { Write-ErrorAndExit "Backend didn't start. Run: docker compose logs backend" }
 Write-Host " ready."
 
-# ── 7. Seed demo data ────────────────────────────────────────────────────────
+# -- 7. Seed demo data -----------------------------------------------------------
 Write-Section "Seeding demo"
 Write-Info "Creating MX-400 equipment and uploading manual..."
 
@@ -181,22 +187,21 @@ try {
 }
 
 if ($eqId) {
-    try {
-        Invoke-RestMethod -Method Post -Uri "http://localhost:8000/api/v1/documents/upload" -Form @{
-            file          = Get-Item "demo-data/MX400-Maintenance-Manual-DEMO.pdf"
-            title         = "MX-400 Maintenance Manual (DEMO)"
-            equipment_id  = "$eqId"
-        } | Out-Null
+    & curl.exe -sf -X POST "http://localhost:8000/api/v1/documents/upload" `
+        -F "file=@demo-data/MX400-Maintenance-Manual-DEMO.pdf" `
+        -F "title=MX-400 Maintenance Manual (DEMO)" `
+        -F "equipment_id=$eqId" | Out-Null
+    if ($LASTEXITCODE -eq 0) {
         Write-Host "  Equipment: MX-400 (id=$eqId)"
-        Write-Host "  Manual: uploaded — ingestion running (~15s)"
-    } catch {
-        Write-Warn "Manual upload failed — check your API key in .env, then run: .\make.ps1 seed"
+        Write-Host "  Manual: uploaded - ingestion running (~15s)"
+    } else {
+        Write-Warn "Manual upload failed - check your API key in .env, then run: .\make.ps1 seed"
     }
 } else {
-    Write-Warn "Seeding skipped — check your API key in .env, then run: .\make.ps1 seed"
+    Write-Warn "Seeding skipped - check your API key in .env, then run: .\make.ps1 seed"
 }
 
-# ── 8. Done ──────────────────────────────────────────────────────────────────
+# -- 8. Done -----------------------------------------------------------------------
 Write-Section "Ready"
 Write-Host "Setup complete!" -ForegroundColor Green
 Write-Host ""
