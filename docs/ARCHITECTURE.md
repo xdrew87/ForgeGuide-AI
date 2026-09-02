@@ -149,7 +149,7 @@ The system is not coupled to any single LLM vendor. `LLM_PROVIDER` and `LLM_MODE
 
 Docker Compose with four services:
 - `db` (Postgres 16)
-- `qdrant` (Qdrant 1.9)
+- `qdrant` (Qdrant 1.19)
 - `backend` (FastAPI + uvicorn)
 - `frontend` (Next.js)
 

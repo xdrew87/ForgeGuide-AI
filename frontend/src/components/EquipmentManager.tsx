@@ -32,24 +32,26 @@ export default function EquipmentManager({ equipment, onCreated }: Props) {
   return (
     <div className="space-y-3">
       {equipment.map((eq) => (
-        <div key={eq.id} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/5 border border-white/8">
-          <Cpu className="w-4 h-4 text-forge-accent flex-shrink-0" />
+        <div key={eq.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-forge-navy/40 border border-forge-line">
+          <div className="w-7 h-7 rounded-md bg-forge-accent/12 flex items-center justify-center flex-shrink-0">
+            <Cpu className="w-3.5 h-3.5 text-forge-accent" />
+          </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-white">{eq.manufacturer} {eq.model}</p>
-            <p className="text-[10px] text-forge-muted">{eq.equipment_type}</p>
+            <p className="text-sm font-medium text-white">{eq.manufacturer} {eq.model}</p>
+            <p className="text-xs text-forge-muted">{eq.equipment_type}</p>
           </div>
         </div>
       ))}
 
       {showForm ? (
-        <div className="space-y-2 p-3 rounded-lg border border-white/15 bg-white/5">
+        <div className="space-y-2 p-3 rounded-lg border border-forge-line bg-forge-navy/40">
           {["manufacturer", "model", "equipment_type"].map((field) => (
             <input
               key={field}
               value={(form as any)[field]}
               onChange={(e) => setForm((p) => ({ ...p, [field]: e.target.value }))}
               placeholder={field.replace("_", " ")}
-              className="w-full bg-forge-navy border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-forge-muted focus:outline-none focus:border-forge-accent"
+              className="w-full bg-forge-navy border border-forge-line rounded-lg px-3 py-1.5 text-sm text-white placeholder-forge-muted focus:outline-none focus:border-forge-accent"
             />
           ))}
           {error && <p className="text-xs text-red-400">{error}</p>}
@@ -57,13 +59,13 @@ export default function EquipmentManager({ equipment, onCreated }: Props) {
             <button
               onClick={save}
               disabled={saving}
-              className="flex-1 py-1.5 rounded-lg bg-forge-accent text-white text-xs font-medium hover:bg-orange-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
+              className="flex-1 py-1.5 rounded-lg bg-forge-accent text-white text-xs font-medium hover:bg-forge-accentDim disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
             >
               {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
             </button>
             <button
               onClick={() => { setShowForm(false); setError(null); }}
-              className="flex-1 py-1.5 rounded-lg border border-white/10 text-white/60 text-xs hover:border-white/30 transition-colors"
+              className="flex-1 py-1.5 rounded-lg border border-forge-line text-white/60 text-xs hover:border-white/30 transition-colors"
             >
               Cancel
             </button>
@@ -72,7 +74,7 @@ export default function EquipmentManager({ equipment, onCreated }: Props) {
       ) : (
         <button
           onClick={() => setShowForm(true)}
-          className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-white/20 text-xs text-forge-muted hover:border-forge-accent hover:text-forge-accent transition-colors"
+          className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg border border-dashed border-forge-line text-xs text-forge-muted hover:border-forge-accent hover:text-forge-accent transition-colors"
         >
           <Plus className="w-3.5 h-3.5" />
           Add equipment

@@ -49,10 +49,10 @@ A RAG (Retrieval-Augmented Generation) system with a hard evidence gate:
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js 14, React, Tailwind CSS, TypeScript |
+| Frontend | Next.js 16, React 19, Tailwind CSS, TypeScript |
 | Backend | Python, FastAPI |
 | Database | PostgreSQL 16 |
-| Vector DB | Qdrant 1.9 |
+| Vector DB | Qdrant 1.19 |
 | PDF extraction | PyMuPDF |
 | OCR | Tesseract |
 | LLM | Anthropic Claude (or OpenAI) |

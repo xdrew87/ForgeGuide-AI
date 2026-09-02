@@ -4,8 +4,8 @@
 
 [![CI](https://github.com/xdrew87/ForgeGuide-AI/actions/workflows/ci.yml/badge.svg)](https://github.com/xdrew87/ForgeGuide-AI/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](backend)
-[![Next.js 15](https://img.shields.io/badge/Next.js-15-black.svg)](frontend)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](backend)
+[![Next.js 16](https://img.shields.io/badge/Next.js-16-black.svg)](frontend)
 [![Docker Compose](https://img.shields.io/badge/Deploy-Docker%20Compose-2496ED.svg)](docker-compose.yml)
 
 Built for **ABB Accelerator 2026 — Theme 2: Multimodal Maintenance Intelligence Agent.**
@@ -63,10 +63,10 @@ return the insufficient-evidence refusal.
 
 | Layer | Tech |
 |---|---|
-| Frontend | Next.js 15, React 18, Tailwind CSS, TypeScript |
-| Backend | Python 3.12, FastAPI, SQLAlchemy |
+| Frontend | Next.js 16, React 19, Tailwind CSS, TypeScript |
+| Backend | Python 3.11+, FastAPI, SQLAlchemy |
 | Database | PostgreSQL 16 |
-| Vector DB | Qdrant |
+| Vector DB | Qdrant 1.19 |
 | PDF / OCR | PyMuPDF, Tesseract |
 | LLM & embeddings | Anthropic, OpenAI, or local Ollama (pick any one) |
 | Deployment | Docker Compose |

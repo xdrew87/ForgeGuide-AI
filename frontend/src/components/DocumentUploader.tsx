@@ -63,8 +63,8 @@ export default function DocumentUploader({ equipment, documents, onUploaded }: P
         onClick={() => !pendingFile && fileRef.current?.click()}
         className={clsx(
           "relative border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer",
-          dragOver ? "border-forge-accent bg-forge-accent/10" : "border-white/15 hover:border-white/30",
-          pendingFile && "border-green-500/50 bg-green-900/10 cursor-default"
+          dragOver ? "border-forge-accent bg-forge-accent/10" : "border-forge-line hover:border-forge-mid",
+          pendingFile && "border-emerald-500/50 bg-emerald-900/10 cursor-default"
         )}
       >
         <input
@@ -77,7 +77,7 @@ export default function DocumentUploader({ equipment, documents, onUploaded }: P
 
         {pendingFile ? (
           <div className="flex items-center gap-3 justify-center">
-            <FileText className="w-6 h-6 text-green-400" />
+            <FileText className="w-6 h-6 text-emerald-400" />
             <div className="text-left">
               <p className="text-sm font-medium text-white">{pendingFile.name}</p>
               <p className="text-xs text-forge-muted">{(pendingFile.size / 1024).toFixed(0)} KB</p>
@@ -91,7 +91,7 @@ export default function DocumentUploader({ equipment, documents, onUploaded }: P
           </div>
         ) : (
           <>
-            <Upload className="w-8 h-8 mx-auto mb-3 text-forge-muted" />
+            <Upload className="w-7 h-7 mx-auto mb-3 text-forge-muted" strokeWidth={1.75} />
             <p className="text-sm text-white/70">Drop a PDF manual here, or click to browse</p>
             <p className="text-xs text-forge-muted mt-1">Max 50 MB · PDF only</p>
           </>
@@ -105,12 +105,12 @@ export default function DocumentUploader({ equipment, documents, onUploaded }: P
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Document title"
-            className="w-full bg-forge-navy/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-forge-muted focus:outline-none focus:border-forge-accent"
+            className="w-full bg-forge-navy border border-forge-line rounded-lg px-3 py-2 text-sm text-white placeholder-forge-muted focus:outline-none focus:border-forge-accent"
           />
           <select
             value={selectedEquipment}
             onChange={(e) => setSelectedEquipment(e.target.value)}
-            className="w-full bg-forge-navy/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-forge-accent"
+            className="w-full bg-forge-navy border border-forge-line rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-forge-accent"
           >
             <option value="">No equipment (global)</option>
             {equipment.map((eq) => (
@@ -122,9 +122,9 @@ export default function DocumentUploader({ equipment, documents, onUploaded }: P
           <button
             onClick={submit}
             disabled={uploading || !title.trim()}
-            className="w-full py-2 rounded-lg bg-forge-accent text-white text-sm font-medium hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            className="w-full py-2 rounded-lg bg-forge-accent text-white text-sm font-medium hover:bg-forge-accentDim disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
           >
-            {uploading ? <><Loader2 className="w-4 h-4 animate-spin" /> Uploading…</> : "Upload & Ingest"}
+            {uploading ? <><Loader2 className="w-4 h-4 animate-spin" /> Uploading…</> : "Upload & ingest"}
           </button>
           {error && <p className="text-xs text-red-400">{error}</p>}
         </div>
@@ -133,13 +133,13 @@ export default function DocumentUploader({ equipment, documents, onUploaded }: P
       {/* Existing docs */}
       {documents.length > 0 && (
         <div className="space-y-1.5">
-          <p className="text-[10px] font-mono uppercase tracking-widest text-forge-muted">Indexed documents</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-forge-muted/80">Indexed documents</p>
           {documents.map((doc) => (
-            <div key={doc.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/8">
+            <div key={doc.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-forge-navy/40 border border-forge-line">
               <StatusDot status={doc.ingestion_status} />
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-white truncate">{doc.title}</p>
-                <p className="text-[10px] text-forge-muted">{doc.page_count ? `${doc.page_count} pages` : doc.ingestion_status}</p>
+                <p className="text-sm font-medium text-white truncate">{doc.title}</p>
+                <p className="text-xs text-forge-muted">{doc.page_count ? `${doc.page_count} pages` : doc.ingestion_status}</p>
               </div>
               <Badge variant={doc.ingestion_status === "complete" ? "success" : doc.ingestion_status === "failed" ? "danger" : "warn"}>
                 {doc.ingestion_status}
