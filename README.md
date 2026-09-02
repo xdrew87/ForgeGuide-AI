@@ -142,7 +142,7 @@ Windows without `make` on PATH:
 ### 3. Load the demo manual
 
 ```bash
-make seed
+make seed        # Windows: .\make.ps1 seed
 ```
 
 This creates a demo "MX-400" equipment record and uploads the included
