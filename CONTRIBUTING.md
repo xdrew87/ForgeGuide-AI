@@ -7,10 +7,20 @@ scoring, or the LLM call path must preserve it.
 
 ## Getting set up
 
+macOS / Linux:
+
 ```bash
 git clone https://github.com/xdrew87/ForgeGuide-AI.git
 cd ForgeGuide-AI
 bash setup.sh
+```
+
+Windows (PowerShell 7+):
+
+```powershell
+git clone https://github.com/xdrew87/ForgeGuide-AI.git
+cd ForgeGuide-AI
+.\setup.ps1
 ```
 
 See the [README Quick start](README.md#quick-start) for provider

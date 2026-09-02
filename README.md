@@ -78,12 +78,16 @@ return the insufficient-evidence refusal.
 ### Prerequisites
 
 - Docker Desktop
+- Python 3.11+
 - One of: an Anthropic API key, an OpenAI API key, or [Ollama](https://ollama.com) running locally via Docker
+- Windows only: [PowerShell 7+](https://learn.microsoft.com/powershell/scripting/install/installing-powershell) (`pwsh`) — `setup.ps1` and `make.ps1` don't run on the older Windows PowerShell 5.1
 
 > **Apple Silicon / Linux+NVIDIA / Windows+NVIDIA** — Ollama runs well locally, no API key needed.
 > **Intel Mac** — Ollama has no GPU access in Docker, so local inference can take 60–300 seconds per response. It still works, but Anthropic or OpenAI feel much more responsive for a live demo.
 
 ### 1. Clone and configure
+
+**macOS / Linux:**
 
 ```bash
 git clone https://github.com/xdrew87/ForgeGuide-AI.git
@@ -91,9 +95,18 @@ cd ForgeGuide-AI
 bash setup.sh
 ```
 
-`setup.sh` creates `.env` from the template if it doesn't exist, detects an
-Intel Mac and warns about Ollama performance, and builds/starts every
-service. Edit `.env` first (or answer the prompts) to pick a provider:
+**Windows (PowerShell 7+):**
+
+```powershell
+git clone https://github.com/xdrew87/ForgeGuide-AI.git
+cd ForgeGuide-AI
+.\setup.ps1
+```
+
+Both scripts do the same thing: create `.env` from the template if it
+doesn't exist (macOS additionally detects Intel hardware and warns about
+Ollama performance), generate the demo PDF, and build/start every service.
+Edit `.env` first (or answer the prompts) to pick a provider:
 
 ```bash
 LLM_PROVIDER=anthropic          # anthropic | openai | ollama
@@ -110,6 +123,13 @@ If you're using Ollama, pull the models it needs after the stack is up:
 ```bash
 make ollama-pull-llm      # llama3.2 by default
 make ollama-pull-embed    # nomic-embed-text by default
+```
+
+Windows without `make` on PATH:
+
+```powershell
+.\make.ps1 ollama-pull-llm
+.\make.ps1 ollama-pull-embed
 ```
 
 ### 2. Open it
@@ -134,6 +154,8 @@ through the UI's document uploader.
 
 ## Common commands
 
+macOS / Linux (requires GNU Make):
+
 ```bash
 make up             # start all services
 make down            # stop all services
@@ -146,6 +168,20 @@ make clean           # stop and wipe all volumes (full reset)
 make urls            # print service URLs
 ```
 
+Windows (PowerShell 7+, no GNU Make required) — same targets via `make.ps1`:
+
+```powershell
+.\make.ps1 up
+.\make.ps1 down
+.\make.ps1 rebuild
+.\make.ps1 logs
+.\make.ps1 logs-backend
+.\make.ps1 test
+.\make.ps1 seed
+.\make.ps1 clean
+.\make.ps1 urls
+```
+
 **Ollama-specific:**
 
 ```bash
@@ -153,6 +189,13 @@ make ollama-list                       # see downloaded models
 make ollama-pull-llm MODEL=mistral     # pull a different LLM
 make ollama-pull-vision                # pull a vision model (llava) for image fault-code extraction
 make ollama-run                        # interactive shell against the configured model
+```
+
+```powershell
+.\make.ps1 ollama-list
+.\make.ps1 ollama-pull-llm -Model mistral
+.\make.ps1 ollama-pull-vision
+.\make.ps1 ollama-run
 ```
 
 ---
@@ -200,6 +243,15 @@ export ANTHROPIC_API_KEY=test
 python -m pytest tests/ -v
 ```
 
+Windows (PowerShell):
+
+```powershell
+cd backend
+$env:DATABASE_URL = "postgresql://test:test@localhost/test"
+$env:ANTHROPIC_API_KEY = "test"
+python -m pytest tests/ -v
+```
+
 23 tests covering PDF extraction, chunking, upload validation, the
 no-fabrication evidence-gate regression, citation parsing, fault-code
 extraction, and RRF fusion.
@@ -230,7 +282,10 @@ ForgeGuide-AI/
 ├── docs/                 architecture, security, demo script, hackathon writeup
 ├── scripts/              generate_demo_manual.py
 ├── docker-compose.yml
-└── setup.sh
+├── setup.sh              macOS / Linux setup
+├── setup.ps1             Windows setup
+├── Makefile              macOS / Linux task runner
+└── make.ps1              Windows task runner
 ```
 
 </details>
@@ -256,7 +311,11 @@ Full model: [docs/SECURITY.md](docs/SECURITY.md).
 not describe any real ABB or third-party product. Regenerate it with:
 
 ```bash
-python3 scripts/generate_demo_manual.py
+python3 scripts/generate_demo_manual.py   # or: make demo
+```
+
+```powershell
+python scripts/generate_demo_manual.py    # or: .\make.ps1 demo
 ```
 
 ---
