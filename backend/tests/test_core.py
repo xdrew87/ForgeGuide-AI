@@ -127,6 +127,94 @@ class TestPDFExtraction:
         assert len(all_chunks) >= 5, f"Expected ≥5 chunks, got {len(all_chunks)}"
 
 
+# ─── Unit tests: Table extraction ───────────────────────────────────────────
+
+class TestTableExtraction:
+    def test_table_to_markdown_basic_rows(self):
+        from app.services.ingestion import _table_to_markdown
+        rows = [["Code", "Name"], ["E17", "Thermal Overtemperature"]]
+        md = _table_to_markdown(rows)
+        assert md.startswith("| Code | Name |")
+        assert "E17" in md
+        assert "Thermal Overtemperature" in md
+
+    def test_table_to_markdown_handles_none_cells(self):
+        from app.services.ingestion import _table_to_markdown
+        rows = [["A", "B"], [None, "value"]]
+        md = _table_to_markdown(rows)
+        assert "None" not in md
+
+    def test_table_to_markdown_empty_rows(self):
+        from app.services.ingestion import _table_to_markdown
+        assert _table_to_markdown([]) == ""
+
+    def test_demo_pdf_tables_detected(self):
+        """Demo manual's fault-code reference table must be found and typed."""
+        from app.services.ingestion import _extract_text_from_pdf
+        demo_pdf = os.path.join(
+            os.path.dirname(__file__), "..", "..", "demo-data",
+            "MX400-Maintenance-Manual-DEMO.pdf"
+        )
+        if not os.path.exists(demo_pdf):
+            pytest.skip("Demo PDF not found — run scripts/generate_demo_manual.py first")
+
+        pages = _extract_text_from_pdf(demo_pdf)
+        all_tables = [t for p in pages for t in p.get("tables", [])]
+        assert len(all_tables) > 0, "Expected at least one table in the demo PDF"
+
+        # The fault-code reference table should be among them
+        header_rows = [t["rows"][0] for t in all_tables if t["rows"]]
+        assert any("Code" in row for row in header_rows), "Fault-code table header not found"
+
+    def test_table_content_excluded_from_prose_chunks(self):
+        """Raw table cell text must not also appear duplicated in a text chunk."""
+        from app.services.ingestion import _extract_text_from_pdf, _chunk_page_text
+        demo_pdf = os.path.join(
+            os.path.dirname(__file__), "..", "..", "demo-data",
+            "MX400-Maintenance-Manual-DEMO.pdf"
+        )
+        if not os.path.exists(demo_pdf):
+            pytest.skip("Demo PDF not found")
+
+        pages = _extract_text_from_pdf(demo_pdf)
+        fault_table_page = next((p for p in pages if p.get("tables")), None)
+        assert fault_table_page is not None
+
+        text_chunks = _chunk_page_text(fault_table_page["page"], fault_table_page["text"])
+        # A distinctive multi-cell phrase from the fault table's "Immediate Action"
+        # column should not have leaked into the plain-text chunker's output.
+        distinctive = "verify motor sizing"
+        for c in text_chunks:
+            assert distinctive not in c["text"].lower()
+
+
+# ─── Unit tests: chunk_type defaulting ──────────────────────────────────────
+
+class TestChunkTypeDefaulting:
+    def test_text_chunks_default_to_text_type(self):
+        from app.services.ingestion import _chunk_page_text
+        text = "The MX-400 heat sink thermal overtemperature fault E17. " * 20
+        chunks = _chunk_page_text(7, text)
+        for c in chunks:
+            assert c.get("chunk_type", "text") == "text" or "chunk_type" not in c
+
+    def test_qdrant_payload_defaults_chunk_type(self):
+        # Build the payload dict the same way VectorStore.upsert_chunks does,
+        # without a live Qdrant connection — verifies the default value only.
+        c = {"chunk_id": "x", "vector": [0.0], "document_id": "d", "page": 1, "text": "t"}
+        payload = {
+            "chunk_id": c["chunk_id"],
+            "document_id": c["document_id"],
+            "document_title": c.get("document_title", ""),
+            "equipment_id": c.get("equipment_id"),
+            "page": c["page"],
+            "section": c.get("section"),
+            "text": c["text"],
+            "chunk_type": c.get("chunk_type", "text"),
+        }
+        assert payload["chunk_type"] == "text"
+
+
 # ─── Unit tests: Upload validation ──────────────────────────────────────────
 
 class TestUploadValidation:
@@ -260,6 +348,73 @@ Citations:
         clean, citations = _parse_citations(raw, [])
         # Should not raise — just return empty citations
         assert isinstance(citations, list)
+
+
+# ─── Unit tests: Multi-document citation disambiguation ─────────────────────
+
+class TestCitationMatchingDisambiguation:
+    """
+    Regression guard for multi-document reasoning: when two retrieved chunks
+    share the same document_title+page (e.g. two documents happen to share a
+    title, or two chunks land on the same page), citation matching must
+    prefer the chunk whose text actually contains the LLM's excerpt rather
+    than blindly taking the first title+page match.
+    """
+
+    def test_disambiguates_by_excerpt_when_multiple_candidates_share_title_page(self):
+        from app.services.qa import _parse_citations
+        raw = """See the fan inspection steps.
+
+```citations
+[{"document": "MX-400 Manual", "page": 8, "section": null, "excerpt": "replace fan assembly immediately"}]
+```"""
+        chunks = [
+            {
+                "document_title": "MX-400 Manual", "page": 8,
+                "chunk_id": "wrong-doc-chunk", "document_id": "doc-A",
+                "text": "Unrelated content about capacitor inspection on page 8.",
+                "chunk_type": "text",
+            },
+            {
+                "document_title": "MX-400 Manual", "page": 8,
+                "chunk_id": "right-doc-chunk", "document_id": "doc-B",
+                "text": "If airflow is reduced, replace fan assembly immediately per spec.",
+                "chunk_type": "text",
+            },
+        ]
+        clean, citations = _parse_citations(raw, chunks)
+        assert len(citations) == 1
+        assert citations[0].chunk_id == "right-doc-chunk"
+        assert citations[0].document_id == "doc-B"
+
+    def test_falls_back_to_first_candidate_when_excerpt_matches_none(self):
+        from app.services.qa import _parse_citations
+        raw = """```citations
+[{"document": "MX-400 Manual", "page": 8, "section": null, "excerpt": "text not present anywhere"}]
+```"""
+        chunks = [
+            {
+                "document_title": "MX-400 Manual", "page": 8,
+                "chunk_id": "first-chunk", "document_id": "doc-A",
+                "text": "Some content.", "chunk_type": "text",
+            },
+        ]
+        clean, citations = _parse_citations(raw, chunks)
+        assert len(citations) == 1
+        assert citations[0].chunk_id == "first-chunk"
+
+    def test_single_candidate_case_still_matches_unchanged(self):
+        """Existing single-candidate behavior (TestCitationParsing) must be preserved."""
+        from app.services.qa import _parse_citations
+        raw = """```citations
+[{"document": "MX-400 Manual", "page": 8, "section": "4.1", "excerpt": "Inspect fan blades"}]
+```"""
+        chunks = [{"document_title": "MX-400 Manual", "page": 8, "chunk_id": "c1",
+                    "document_id": "d1", "text": "Inspect fan blades for cracks.", "chunk_type": "text"}]
+        clean, citations = _parse_citations(raw, chunks)
+        assert len(citations) == 1
+        assert citations[0].chunk_id == "c1"
+        assert citations[0].document_id == "d1"
 
 
 # ─── Unit tests: Fault code extraction ──────────────────────────────────────

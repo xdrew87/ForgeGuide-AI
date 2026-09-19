@@ -5,13 +5,14 @@ import logging
 import threading
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db.session import get_db, SessionLocal
 from app.models.models import Document, DocumentChunk, IngestionStatus
+from app.services.highlights import find_highlight_rects, render_page_image
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -47,8 +48,22 @@ class ChunkOut(BaseModel):
     page: int
     section: str | None
     text: str
+    chunk_type: str
 
     model_config = {"from_attributes": True}
+
+
+class RectOut(BaseModel):
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+
+
+class HighlightsOut(BaseModel):
+    page_width: float
+    page_height: float
+    rects: list[RectOut]
 
 
 @router.post("/upload", response_model=DocumentOut, status_code=201)
@@ -137,6 +152,59 @@ def get_chunks(document_id: str, page: int = None, db: Session = Depends(get_db)
     if page is not None:
         q = q.filter(DocumentChunk.page == page)
     return q.order_by(DocumentChunk.page).all()
+
+
+@router.get("/{document_id}/pages/{page_number}/image")
+def get_page_image(document_id: str, page_number: int, scale: float = 2.0, db: Session = Depends(get_db)):
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if doc.page_count and page_number > doc.page_count:
+        raise HTTPException(status_code=404, detail="Page out of range")
+
+    pdf_path = os.path.join(settings.upload_dir, doc.filename)
+    scale = max(0.5, min(scale, 4.0))
+    png_bytes = render_page_image(pdf_path, page_number, scale=scale)
+    if png_bytes is None:
+        raise HTTPException(status_code=404, detail="Page out of range")
+
+    return Response(
+        content=png_bytes,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@router.get("/{document_id}/pages/{page_number}/highlights", response_model=HighlightsOut)
+def get_page_highlights(
+    document_id: str,
+    page_number: int,
+    chunk_id: str = None,
+    excerpt: str = None,
+    db: Session = Depends(get_db),
+):
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    search_text = None
+    if chunk_id:
+        chunk = db.query(DocumentChunk).filter(DocumentChunk.id == chunk_id).first()
+        if chunk:
+            search_text = chunk.text
+    if not search_text:
+        search_text = excerpt or ""
+
+    if not search_text.strip():
+        raise HTTPException(status_code=400, detail="chunk_id or excerpt is required")
+
+    pdf_path = os.path.join(settings.upload_dir, doc.filename)
+    page_width, page_height, rects = find_highlight_rects(pdf_path, page_number, search_text)
+    return HighlightsOut(
+        page_width=page_width,
+        page_height=page_height,
+        rects=[RectOut(x0=r[0], y0=r[1], x1=r[2], y1=r[3]) for r in rects],
+    )
 
 
 @router.delete("/{document_id}", status_code=204)

@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, KeyboardEvent } from "react";
 import { Send, AlertTriangle, ShieldCheck, Loader2, ImagePlus } from "lucide-react";
-import { api, AskResponse, Equipment, ImageAnalysis } from "../lib/api";
+import { api, AskResponse, Citation, Equipment, ImageAnalysis } from "../lib/api";
 import CitationPanel from "./CitationPanel";
+import EvidenceViewer from "./EvidenceViewer";
 import { ConfidenceBar, Badge } from "./ui";
 import clsx from "clsx";
 
@@ -25,7 +26,7 @@ export default function ChatInterface({ equipment }: Props) {
   const [selectedEquipment, setSelectedEquipment] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
-  const [activeCitation, setActiveCitation] = useState<string | null>(null);
+  const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
 
@@ -191,6 +192,7 @@ export default function ChatInterface({ equipment }: Props) {
                       evidence_sufficient={msg.qaData.evidence_sufficient}
                       confidence={msg.qaData.confidence}
                       chunks_used={msg.qaData.chunks_used}
+                      onCitationClick={setActiveCitation}
                     />
                   )}
                 </div>
@@ -210,6 +212,7 @@ export default function ChatInterface({ equipment }: Props) {
                   evidence_sufficient={msg.imageData.qa_evidence_sufficient}
                   confidence={msg.imageData.qa_confidence}
                   chunks_used={msg.imageData.qa_citations.length}
+                  onCitationClick={setActiveCitation}
                 />
               )}
             </div>
@@ -274,6 +277,8 @@ export default function ChatInterface({ equipment }: Props) {
           onChange={(e) => { const f = e.target.files?.[0]; if (f) analyzeImage(f); }}
         />
       </div>
+
+      <EvidenceViewer citation={activeCitation} onClose={() => setActiveCitation(null)} />
     </div>
   );
 }

@@ -39,6 +39,20 @@ export interface Citation {
   excerpt: string;
   chunk_id: string;
   document_id: string;
+  chunk_type?: "text" | "table";
+}
+
+export interface HighlightRect {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+export interface HighlightsOut {
+  page_width: number;
+  page_height: number;
+  rects: HighlightRect[];
 }
 
 export interface AskResponse {
@@ -88,6 +102,10 @@ export const api = {
     },
     delete: (id: string): Promise<void> =>
       req(`/documents/${id}`, { method: "DELETE" }),
+    pageImageUrl: (documentId: string, page: number): string =>
+      `${API_PREFIX}/documents/${documentId}/pages/${page}/image`,
+    getHighlights: (documentId: string, page: number, chunkId?: string): Promise<HighlightsOut> =>
+      req(`/documents/${documentId}/pages/${page}/highlights${chunkId ? `?chunk_id=${chunkId}` : ""}`),
   },
   chat: {
     ask: (question: string, equipment_id?: string, conversation_id?: string): Promise<AskResponse> =>

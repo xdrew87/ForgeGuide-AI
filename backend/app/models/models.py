@@ -73,6 +73,7 @@ class DocumentChunk(Base):
     section = Column(String(512), nullable=True)
     text = Column(Text, nullable=False)
     char_count = Column(Integer, nullable=False)
+    chunk_type = Column(String(20), nullable=False, default="text", server_default="text")
     qdrant_point_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 

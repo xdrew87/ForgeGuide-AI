@@ -69,6 +69,7 @@ async def analyze_image(
                     "excerpt": c.excerpt,
                     "chunk_id": c.chunk_id,
                     "document_id": c.document_id,
+                    "chunk_type": c.chunk_type,
                 }
                 for c in result.citations
             ]

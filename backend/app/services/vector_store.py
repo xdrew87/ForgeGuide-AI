@@ -67,6 +67,7 @@ class VectorStore:
                     "page": c["page"],
                     "section": c.get("section"),
                     "text": c["text"],
+                    "chunk_type": c.get("chunk_type", "text"),
                 },
             ))
 
@@ -109,6 +110,7 @@ class VectorStore:
                 "page": r.payload.get("page"),
                 "section": r.payload.get("section"),
                 "text": r.payload.get("text"),
+                "chunk_type": r.payload.get("chunk_type", "text"),
             }
             for r in response.points
         ]

@@ -50,7 +50,7 @@ def _keyword_search(db: Session, query: str, equipment_id: str | None, top_k: in
         params["equipment_id"] = equipment_id
 
     sql = text(f"""
-        SELECT dc.id, dc.document_id, dc.page, dc.section, dc.text, dc.char_count,
+        SELECT dc.id, dc.document_id, dc.page, dc.section, dc.text, dc.char_count, dc.chunk_type,
                d.title as document_title, d.equipment_id,
                ({match_count_expr}) as match_count
         FROM document_chunks dc
@@ -71,6 +71,7 @@ def _keyword_search(db: Session, query: str, equipment_id: str | None, top_k: in
             "page": row.page,
             "section": row.section,
             "text": row.text,
+            "chunk_type": row.chunk_type or "text",
             "score": round(row.match_count / len(keywords), 4) if row.match_count else None,
         }
         for row in rows

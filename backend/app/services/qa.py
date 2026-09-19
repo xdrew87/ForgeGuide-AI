@@ -55,6 +55,7 @@ class Citation:
     excerpt: str
     chunk_id: str
     document_id: str
+    chunk_type: str = "text"
 
 
 @dataclass
@@ -71,8 +72,9 @@ def _build_context(chunks: list[dict]) -> str:
     blocks = []
     for i, c in enumerate(chunks):
         section_str = f", Section: {c['section']}" if c.get("section") else ""
+        tag = " (TABLE)" if c.get("chunk_type") == "table" else ""
         blocks.append(
-            f"[SOURCE {i+1}] Document: {c['document_title']} | Page: {c['page']}{section_str}\n"
+            f"[SOURCE {i+1}]{tag} Document: {c['document_title']} | Page: {c['page']}{section_str}\n"
             f"{c['text']}\n"
         )
     return "\n".join(blocks)
@@ -180,12 +182,25 @@ def _parse_citations(raw_text: str, chunks: list[dict]) -> tuple[str, list[Citat
         try:
             cite_data = json.loads(json_str)
             for c in cite_data:
-                matching = next(
-                    (ch for ch in chunks
-                     if ch["document_title"] == c.get("document")
-                     and ch["page"] == c.get("page")),
-                    None
-                )
+                # Multiple chunks can share the same document_title+page once
+                # more than one document is retrieved for an equipment — prefer
+                # the candidate whose text actually contains the LLM's excerpt
+                # over just taking the first title+page match.
+                candidates = [
+                    ch for ch in chunks
+                    if ch["document_title"] == c.get("document")
+                    and ch["page"] == c.get("page")
+                ]
+                excerpt_prefix = c.get("excerpt", "")[:40].strip().lower()
+                matching = None
+                if candidates:
+                    if excerpt_prefix:
+                        matching = next(
+                            (ch for ch in candidates if excerpt_prefix in ch.get("text", "").lower()),
+                            None
+                        )
+                    if matching is None:
+                        matching = candidates[0]
                 citations.append(Citation(
                     document=c.get("document", "Unknown"),
                     page=c.get("page", 0),
@@ -193,6 +208,7 @@ def _parse_citations(raw_text: str, chunks: list[dict]) -> tuple[str, list[Citat
                     excerpt=c.get("excerpt", "")[:150],
                     chunk_id=matching["chunk_id"] if matching else "",
                     document_id=matching["document_id"] if matching else "",
+                    chunk_type=matching.get("chunk_type", "text") if matching else "text",
                 ))
         except (json.JSONDecodeError, KeyError) as e:
             logger.warning(f"Citation parse failed: {e}")
