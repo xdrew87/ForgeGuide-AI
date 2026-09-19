@@ -17,6 +17,18 @@ updates:
       npm_and_yarn:
         patterns:
           - "*"
+    ignore:
+      # typescript-eslint (via eslint-config-next) doesn't support TS 7 yet, and
+      # `npm run lint` crashes with it. Drop this once typescript-eslint adds
+      # support: https://github.com/typescript-eslint/typescript-eslint/issues/10940
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      # eslint-config-next parses through Next's bundled Babel parser, whose
+      # scope manager lacks addGlobals() that ESLint 10 requires
+      # ("TypeError: scopeManager.addGlobals is not a function"). Stay on ESLint 9
+      # until a Next release ships a compatible parser.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "docker"
     directory: "/backend"

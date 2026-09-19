@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# Least privilege: no job here needs to write to the repo, so scope the default
+# GITHUB_TOKEN to read-only (resolves the CodeQL "workflow does not contain
+# permissions" alerts for every job below).
+permissions:
+  contents: read
+
 jobs:
   backend-tests:
     name: Backend tests
