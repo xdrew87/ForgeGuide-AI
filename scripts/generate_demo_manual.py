@@ -303,17 +303,22 @@ def build_manual(output_path: str):
         ["E22", "Parameter CRC Error", "Non-volatile memory corruption", "Restore factory defaults; reprogram parameters"],
         ["E31", "Communication Fault", "Fieldbus/SCADA link lost", "Check fieldbus wiring; verify master address"],
     ]
-    ft = Table(fault_data, colWidths=[0.6*inch, 1.5*inch, 2.2*inch, 2.2*inch])
+    # Cells are Paragraphs so long text wraps inside its column instead of
+    # spilling past the table border (which also drops it from table extraction).
+    cell = ParagraphStyle("Cell", parent=styles["Normal"], fontSize=8, leading=10)
+    cell_head = ParagraphStyle("CellHead", parent=cell, fontName="Helvetica-Bold", textColor=colors.white)
+    cell_hot = ParagraphStyle("CellHot", parent=cell, fontName="Helvetica-Bold")
+    fault_cells = [
+        [Paragraph(c, cell_head if r == 0 else cell_hot if r == 9 else cell) for c in row]
+        for r, row in enumerate(fault_data)
+    ]
+    ft = Table(fault_cells, colWidths=[0.6*inch, 1.5*inch, 2.2*inch, 2.2*inch])
     ft.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a3a5c")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 8),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f0f4f8")]),
         # Highlight E17 row
         ("BACKGROUND", (0, 9), (-1, 9), colors.HexColor("#fff3cd")),
-        ("FONTNAME", (0, 9), (-1, 9), "Helvetica-Bold"),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
         ("TOPPADDING", (0, 0), (-1, -1), 4),

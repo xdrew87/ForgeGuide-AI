@@ -25,6 +25,9 @@ class CitationOut(BaseModel):
     excerpt: str
     chunk_id: str
     document_id: str
+    chunk_type: str = "text"
+    verified: bool = False
+    quote: str = ""
 
 
 class AskResponse(BaseModel):
@@ -86,6 +89,9 @@ def ask(payload: AskRequest, db: Session = Depends(get_db)):
                 "excerpt": c.excerpt,
                 "chunk_id": c.chunk_id,
                 "document_id": c.document_id,
+                "chunk_type": c.chunk_type,
+                "verified": c.verified,
+                "quote": c.quote,
             }
             for c in result.citations
         ]),
@@ -109,6 +115,9 @@ def ask(payload: AskRequest, db: Session = Depends(get_db)):
                 excerpt=c.excerpt,
                 chunk_id=c.chunk_id,
                 document_id=c.document_id,
+                chunk_type=c.chunk_type,
+                verified=c.verified,
+                quote=c.quote,
             )
             for c in result.citations
         ],

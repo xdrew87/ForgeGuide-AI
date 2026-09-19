@@ -6,6 +6,7 @@ Supports: anthropic, openai, ollama
 """
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
@@ -56,6 +57,8 @@ class Citation:
     chunk_id: str
     document_id: str
     chunk_type: str = "text"
+    verified: bool = False
+    quote: str = ""  # the LLM's own quoted text, used to pinpoint the exact spot (e.g. a table row)
 
 
 @dataclass
@@ -147,7 +150,42 @@ def _call_ollama(messages: list[dict]) -> str:
     return data["message"]["content"]
 
 
-def _parse_citations(raw_text: str, chunks: list[dict]) -> tuple[str, list[Citation]]:
+# Manual-style fault codes (E17, F03). Deliberately excludes hyphenated model
+# numbers/part numbers (MX-400, MX4-FAN-02) so they aren't mistaken for codes.
+FAULT_CODE_RE = re.compile(r"\b[A-Z]{1,2}\d{2,3}\b")
+
+
+def _filter_off_topic_fault_chunks(question: str, chunks: list[dict]) -> list[dict]:
+    """
+    If the question names specific fault code(s), drop retrieved chunks that are
+    clearly about *other* fault codes. Generic words ("immediate action",
+    "fault") make other faults' procedures rank highly, and a small model will
+    then present them as guidance for the asked-about fault — exactly the
+    cross-contamination this product must not produce. Chunks that mention no
+    fault code at all are kept; the section heading counts toward a chunk's
+    codes since body text often omits the code its section is about.
+    """
+    wanted = set(FAULT_CODE_RE.findall(question.upper()))
+    if not wanted:
+        return chunks
+
+    kept = []
+    for ch in chunks:
+        blob = f"{ch.get('text', '')} {ch.get('section') or ''}".upper()
+        codes = set(FAULT_CODE_RE.findall(blob))
+        if not codes or codes & wanted:
+            kept.append(ch)
+    if len(kept) < len(chunks):
+        logger.info(f"Fault-code filter dropped {len(chunks) - len(kept)} off-topic chunk(s) for {sorted(wanted)}")
+    return kept
+
+
+def _norm_for_match(s: str) -> str:
+    """Lowercase, drop markdown-table pipes, collapse whitespace."""
+    return " ".join(s.replace("|", " ").split()).lower()
+
+
+def _parse_citations(raw_text: str, chunks: list[dict], question: str = "") -> tuple[str, list[Citation]]:
     """
     Extract the citations JSON array from raw LLM output.
     Prefers the requested ```citations fenced block, but falls back to a
@@ -191,24 +229,50 @@ def _parse_citations(raw_text: str, chunks: list[dict]) -> tuple[str, list[Citat
                     if ch["document_title"] == c.get("document")
                     and ch["page"] == c.get("page")
                 ]
-                excerpt_prefix = c.get("excerpt", "")[:40].strip().lower()
+                excerpt_prefix = _norm_for_match(c.get("excerpt", "")[:40])
                 matching = None
+                verified = False
                 if candidates:
                     if excerpt_prefix:
                         matching = next(
-                            (ch for ch in candidates if excerpt_prefix in ch.get("text", "").lower()),
+                            (ch for ch in candidates
+                             if excerpt_prefix in _norm_for_match(ch.get("text", ""))),
                             None
                         )
+                        verified = matching is not None
                     if matching is None:
                         matching = candidates[0]
+
+                chunk_type = matching.get("chunk_type", "text") if matching else "text"
+                # Table citations show the real table (markdown) from the source
+                # chunk — the LLM's short excerpt would truncate it mid-row.
+                excerpt = (
+                    matching.get("text", "") if matching and chunk_type == "table"
+                    else c.get("excerpt", "")[:150]
+                )
+                # What the evidence viewer should pinpoint. For a table, prefer a
+                # fault code named in the *question* over the LLM's quote — the
+                # model often quotes the header row instead of the relevant cell,
+                # and the question is deterministic.
+                quote = c.get("excerpt", "")[:150]
+                if matching and chunk_type == "table":
+                    table_text = matching.get("text", "").upper()
+                    focus = next(
+                        (code for code in FAULT_CODE_RE.findall(question.upper()) if code in table_text),
+                        None,
+                    )
+                    if focus:
+                        quote = focus
                 citations.append(Citation(
                     document=c.get("document", "Unknown"),
                     page=c.get("page", 0),
                     section=c.get("section"),
-                    excerpt=c.get("excerpt", "")[:150],
+                    excerpt=excerpt,
                     chunk_id=matching["chunk_id"] if matching else "",
                     document_id=matching["document_id"] if matching else "",
-                    chunk_type=matching.get("chunk_type", "text") if matching else "text",
+                    chunk_type=chunk_type,
+                    verified=verified,
+                    quote=quote,
                 ))
         except (json.JSONDecodeError, KeyError) as e:
             logger.warning(f"Citation parse failed: {e}")
@@ -236,6 +300,7 @@ def _estimate_confidence(chunks: list[dict]) -> float:
 
 def answer(db: Session, question: str, equipment_id: str | None = None) -> QAResult:
     chunks = retrieve(db, question, equipment_id=equipment_id, top_k=10)
+    chunks = _filter_off_topic_fault_chunks(question, chunks)
     confidence = _estimate_confidence(chunks)
 
     if not chunks or confidence < settings.evidence_confidence_threshold:
@@ -261,7 +326,7 @@ def answer(db: Session, question: str, equipment_id: str | None = None) -> QARes
     raw = _call_llm(messages)
 
     evidence_sufficient = "<<INSUFFICIENT_EVIDENCE>>" not in raw
-    clean_answer, citations = _parse_citations(raw, chunks)
+    clean_answer, citations = _parse_citations(raw, chunks, question=question)
 
     return QAResult(
         question=question,

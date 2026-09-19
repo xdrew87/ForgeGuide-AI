@@ -403,6 +403,47 @@ class TestCitationMatchingDisambiguation:
         assert len(citations) == 1
         assert citations[0].chunk_id == "first-chunk"
 
+    def test_verified_true_only_when_excerpt_found_in_source(self):
+        from app.services.qa import _parse_citations
+        chunks = [{"document_title": "M", "page": 1, "chunk_id": "c1", "document_id": "d1",
+                   "text": "Inspect fan blades for cracks.", "chunk_type": "text"}]
+        good = '```citations\n[{"document": "M", "page": 1, "excerpt": "Inspect fan blades"}]\n```'
+        bad = '```citations\n[{"document": "M", "page": 1, "excerpt": "Replace the IGBT module now"}]\n```'
+        assert _parse_citations(good, chunks)[1][0].verified is True
+        bad_cite = _parse_citations(bad, chunks)[1][0]
+        assert bad_cite.verified is False
+        assert bad_cite.chunk_id == "c1"  # still attributed to the page's chunk
+
+    def test_table_citation_uses_full_table_text_and_ignores_pipes(self):
+        from app.services.qa import _parse_citations
+        table_md = "| Code | Name |\n| --- | --- |\n| E09 | Overcurrent |"
+        chunks = [{"document_title": "M", "page": 8, "chunk_id": "t1", "document_id": "d1",
+                   "text": table_md, "chunk_type": "table"}]
+        raw = '```citations\n[{"document": "M", "page": 8, "excerpt": "E09 Overcurrent"}]\n```'
+        c = _parse_citations(raw, chunks)[1][0]
+        assert c.chunk_type == "table"
+        assert c.excerpt == table_md
+        assert c.verified is True
+
+    def test_table_quote_prefers_fault_code_from_question_over_llm_quote(self):
+        """Small models often quote the header row; the question is deterministic."""
+        from app.services.qa import _parse_citations
+        table_md = "| Code | Name |\n| --- | --- |\n| E09 | Overcurrent |\n| E17 | Thermal |"
+        chunks = [{"document_title": "M", "page": 8, "chunk_id": "t1", "document_id": "d1",
+                   "text": table_md, "chunk_type": "table"}]
+        raw = '```citations\n[{"document": "M", "page": 8, "excerpt": "| Code | Name |"}]\n```'
+        c = _parse_citations(raw, chunks, question="What is fault E09?")[1][0]
+        assert c.quote == "E09"
+
+    def test_table_quote_falls_back_to_llm_quote_without_code_in_question(self):
+        from app.services.qa import _parse_citations
+        table_md = "| Code | Name |\n| --- | --- |\n| E09 | Overcurrent |"
+        chunks = [{"document_title": "M", "page": 8, "chunk_id": "t1", "document_id": "d1",
+                   "text": table_md, "chunk_type": "table"}]
+        raw = '```citations\n[{"document": "M", "page": 8, "excerpt": "Overcurrent"}]\n```'
+        c = _parse_citations(raw, chunks, question="Which faults are listed?")[1][0]
+        assert c.quote == "Overcurrent"
+
     def test_single_candidate_case_still_matches_unchanged(self):
         """Existing single-candidate behavior (TestCitationParsing) must be preserved."""
         from app.services.qa import _parse_citations
@@ -415,6 +456,49 @@ class TestCitationMatchingDisambiguation:
         assert len(citations) == 1
         assert citations[0].chunk_id == "c1"
         assert citations[0].document_id == "d1"
+
+
+# ─── Unit tests: fault-code cross-contamination guard ───────────────────────
+
+class TestFaultCodeGuard:
+    """
+    Regression: an E09 question must not be answered from the E17 procedure.
+    Generic words ('immediate action', 'fault') retrieve other faults' chunks,
+    and a small LLM then presents them as guidance for the asked-about fault.
+    """
+
+    def _chunks(self):
+        return [
+            {"chunk_id": "table", "text": "| E09 | Overcurrent | Check load |\n| E17 | Thermal | See 6.3 |",
+             "section": "6. Fault Codes", "chunk_type": "table"},
+            {"chunk_id": "e17-steps", "text": "Inspect the cooling fan for rotation and noise.",
+             "section": "6.3 E17 — Thermal Overtemperature Fault", "chunk_type": "text"},
+            {"chunk_id": "generic", "text": "Always apply lockout/tagout before opening the enclosure.",
+             "section": None, "chunk_type": "text"},
+        ]
+
+    def test_drops_chunks_about_other_fault_codes(self):
+        from app.services.qa import _filter_off_topic_fault_chunks
+        kept = {c["chunk_id"] for c in _filter_off_topic_fault_chunks(
+            "What is the immediate action for fault E09?", self._chunks())}
+        assert "e17-steps" not in kept          # section names E17, not E09
+        assert "table" in kept                  # contains E09
+        assert "generic" in kept                # mentions no fault code
+
+    def test_lowercase_code_in_question_still_filters(self):
+        from app.services.qa import _filter_off_topic_fault_chunks
+        kept = {c["chunk_id"] for c in _filter_off_topic_fault_chunks(
+            "what does e17 mean", self._chunks())}
+        assert "e17-steps" in kept
+
+    def test_no_code_in_question_leaves_chunks_untouched(self):
+        from app.services.qa import _filter_off_topic_fault_chunks
+        chunks = self._chunks()
+        assert _filter_off_topic_fault_chunks("How do I inspect the cooling fan?", chunks) == chunks
+
+    def test_model_and_part_numbers_are_not_treated_as_fault_codes(self):
+        from app.services.qa import FAULT_CODE_RE
+        assert FAULT_CODE_RE.findall("MX-400 uses part MX4-FAN-02 at CN-FAN1") == []
 
 
 # ─── Unit tests: Fault code extraction ──────────────────────────────────────

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.db.session import get_db, SessionLocal
 from app.models.models import Document, DocumentChunk, IngestionStatus
-from app.services.highlights import find_highlight_rects, render_page_image
+from app.services.highlights import find_highlight_rects, find_table_highlight_rects, render_page_image
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -188,6 +188,7 @@ def get_page_highlights(
         raise HTTPException(status_code=404, detail="Document not found")
 
     search_text = None
+    chunk = None
     if chunk_id:
         chunk = db.query(DocumentChunk).filter(DocumentChunk.id == chunk_id).first()
         if chunk:
@@ -199,7 +200,13 @@ def get_page_highlights(
         raise HTTPException(status_code=400, detail="chunk_id or excerpt is required")
 
     pdf_path = os.path.join(settings.upload_dir, doc.filename)
-    page_width, page_height, rects = find_highlight_rects(pdf_path, page_number, search_text)
+    if chunk is not None and chunk.chunk_type == "table":
+        # For a table the excerpt param carries the LLM's quoted cell text.
+        page_width, page_height, rects = find_table_highlight_rects(
+            pdf_path, page_number, chunk.text, excerpt or ""
+        )
+    else:
+        page_width, page_height, rects = find_highlight_rects(pdf_path, page_number, search_text)
     return HighlightsOut(
         page_width=page_width,
         page_height=page_height,

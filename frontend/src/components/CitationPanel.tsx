@@ -12,6 +12,10 @@ interface Props {
   onCitationClick?: (citation: Citation) => void;
 }
 
+function tableRowCount(text: string): number {
+  return text.split("\n").filter((r) => r.trim().startsWith("|") && !/^\|[\s-:|]+\|$/.test(r.trim())).length;
+}
+
 function TableExcerpt({ text }: { text: string }) {
   const rows = text
     .split("\n")
@@ -102,10 +106,17 @@ export default function CitationPanel({ citations, evidence_sufficient, confiden
                         <span className="text-xs font-medium text-white/90 truncate">{c.document}</span>
                         <Badge variant="muted">pg {c.page}</Badge>
                         {c.chunk_type === "table" && <Badge variant="warn">Table</Badge>}
+                        {c.verified
+                          ? <Badge variant="success">Verified in source</Badge>
+                          : <Badge variant="muted">Unverified quote</Badge>}
                         {c.section && <Badge variant="default">{c.section.slice(0, 40)}</Badge>}
                       </div>
                       {!open && (
-                        <p className="text-xs text-forge-muted mt-1 truncate">{c.excerpt}</p>
+                        <p className="text-xs text-forge-muted mt-1 truncate">
+                          {c.chunk_type === "table"
+                            ? `Table with ${Math.max(tableRowCount(c.excerpt) - 1, 0)} rows — expand to view`
+                            : c.excerpt}
+                        </p>
                       )}
                     </div>
                     {open ? (

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { api, Citation, HighlightRect } from "../lib/api";
 import Modal from "./Modal";
@@ -17,11 +17,21 @@ function EvidenceViewerContent({ citation }: { citation: Citation }) {
   const [pageSize, setPageSize] = useState<{ w: number; h: number } | null>(null);
   const [imageError, setImageError] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const firstHighlightRef = useRef<HTMLDivElement>(null);
+
+  // Bring the highlighted passage into view — it's often mid-page, below the
+  // fold. Wait for the image so the overlay has real dimensions to scroll to.
+  useEffect(() => {
+    if (imgLoaded && rects && rects.length > 0) {
+      firstHighlightRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [rects, imgLoaded]);
 
   useEffect(() => {
     let cancelled = false;
     api.documents
-      .getHighlights(citation.document_id, citation.page, citation.chunk_id || undefined)
+      .getHighlights(citation.document_id, citation.page, citation.chunk_id || undefined, citation.quote)
       .then((h) => {
         if (cancelled) return;
         setRects(h.rects);
@@ -66,12 +76,14 @@ function EvidenceViewerContent({ citation }: { citation: Citation }) {
           <img
             src={imgSrc}
             alt={`${citation.document} page ${citation.page}`}
+            onLoad={() => setImgLoaded(true)}
             onError={() => setImageError(true)}
             className="max-w-full rounded-md border border-forge-line"
           />
           {pageSize && rects && rects.map((r, i) => (
             <div
               key={i}
+              ref={i === 0 ? firstHighlightRef : undefined}
               className="absolute bg-amber-400/30 border border-amber-400/70 rounded-sm pointer-events-none"
               style={{
                 left: `${(r.x0 / pageSize.w) * 100}%`,

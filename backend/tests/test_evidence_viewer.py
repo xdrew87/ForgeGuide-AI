@@ -41,6 +41,66 @@ class TestHighlightSearch:
         )
         assert rects == []
 
+    def _fault_table_markdown(self):
+        from app.services.ingestion import _extract_text_from_pdf, _table_to_markdown
+        pages = _extract_text_from_pdf(DEMO_PDF)
+        fault = next(t for p in pages for t in p["tables"] if t["rows"][0][0] == "Code")
+        return fault["page"], fault["bbox"], _table_to_markdown(fault["rows"])
+
+    def test_table_quote_highlights_single_row(self):
+        """A quoted cell should highlight just its own row, not the whole table."""
+        from app.services.highlights import find_table_highlight_rects
+        if not os.path.exists(DEMO_PDF):
+            pytest.skip("Demo PDF not found")
+        page, bbox, md = self._fault_table_markdown()
+
+        _, _, rects = find_table_highlight_rects(DEMO_PDF, page, md, "Check load; verify motor sizing")
+        assert len(rects) == 1
+        x0, y0, x1, y1 = rects[0]
+        table_height = bbox[3] - bbox[1]
+        assert (y1 - y0) < table_height / 4  # one row, not the entire table
+
+    def test_table_without_matching_quote_highlights_whole_table(self):
+        from app.services.highlights import find_table_highlight_rects
+        if not os.path.exists(DEMO_PDF):
+            pytest.skip("Demo PDF not found")
+        page, bbox, md = self._fault_table_markdown()
+
+        _, _, rects = find_table_highlight_rects(DEMO_PDF, page, md, "no such text qq zz")
+        assert len(rects) == 1
+        assert rects[0] == pytest.approx(bbox)
+
+    def test_header_row_quote_is_ignored_not_highlighted_alone(self):
+        """A quote that is just the header row must not shrink the highlight to the header."""
+        from app.services.highlights import find_table_highlight_rects
+        if not os.path.exists(DEMO_PDF):
+            pytest.skip("Demo PDF not found")
+        page, bbox, md = self._fault_table_markdown()
+
+        header_quote = "| Code | Name | Possible Causes | Immediate Action |"
+        _, _, rects = find_table_highlight_rects(DEMO_PDF, page, md, header_quote)
+        assert len(rects) == 1
+        assert rects[0] == pytest.approx(bbox)
+
+    def test_fault_code_key_highlights_its_row(self):
+        from app.services.highlights import find_table_highlight_rects
+        if not os.path.exists(DEMO_PDF):
+            pytest.skip("Demo PDF not found")
+        page, bbox, md = self._fault_table_markdown()
+
+        _, _, rects = find_table_highlight_rects(DEMO_PDF, page, md, "E09")
+        assert len(rects) == 1
+        assert (rects[0][3] - rects[0][1]) < (bbox[3] - bbox[1]) / 4
+
+    def test_table_with_unknown_header_returns_empty(self):
+        from app.services.highlights import find_table_highlight_rects
+        if not os.path.exists(DEMO_PDF):
+            pytest.skip("Demo PDF not found")
+        page, _, _ = self._fault_table_markdown()
+
+        _, _, rects = find_table_highlight_rects(DEMO_PDF, page, "| Nope | Nada |\n| --- | --- |", "x")
+        assert rects == []
+
     def test_out_of_range_page_returns_empty(self):
         from app.services.highlights import find_highlight_rects
 

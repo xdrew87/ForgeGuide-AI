@@ -172,7 +172,25 @@ export default function ChatInterface({ equipment }: Props) {
                     <span className="text-xs font-semibold">Insufficient evidence</span>
                   </div>
                 )}
-                <p className="whitespace-pre-wrap">{msg.role === "assistant" ? displayAnswer(msg.content) : msg.content}</p>
+                {msg.role === "assistant" ? (
+                  <div className="space-y-1.5">
+                    {displayAnswer(msg.content).split("\n").map((line, i) => {
+                      if (!line.includes("[SAFETY-CRITICAL]")) {
+                        return <p key={i} className="whitespace-pre-wrap">{line}</p>;
+                      }
+                      const text = line.replace("[SAFETY-CRITICAL]", "").trim();
+                      if (!text) return null; // bare tag with no content — nothing to warn about
+                      return (
+                        <div key={i} className="flex gap-2 rounded-md border-l-2 border-red-500 bg-red-950/40 px-3 py-2 text-red-200">
+                          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-red-400" />
+                          <span className="whitespace-pre-wrap">{text}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                )}
               </div>
 
               {/* QA metadata */}
